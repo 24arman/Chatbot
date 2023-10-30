@@ -1,0 +1,163 @@
+import pandas as pd 
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.preprocessing import LabelEncoder
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import StandardScaler
+import scipy as sc
+import keras 
+import nltk 
+nltk.download('punkt')
+from nltk.stem import PorterStemmer
+from sklearn import tree
+from sklearn.model_selection import train_test_split
+from tensorflow.keras import layers
+from sklearn.metrics import r2_score
+
+import tensorflow as tf 
+import random 
+import json
+stemmer = PorterStemmer()
+
+with open ('intents.json') as json_data:
+    intent = json.load(json_data)
+
+intent
+
+
+
+word = []
+classes = []
+document = []
+ignore = ['?']
+
+# Loop through each sentence in the intent's patterns
+for intent in intent['intents']:
+    for pattern in intent['patterns']:
+        #Tokenize each and every worde in sentence
+        w = nltk.word_tokenize(pattern)
+        word.extend(w)
+        
+        
+        document.append((w , intent['tag']))
+        
+        if intent['tag'] not in classes:
+            classes.append(intent['tag'])
+
+
+
+
+# Perform stemming and lower each wordcas well as remove duplicates
+word = [stemmer.stem(w.lower()) for w in word if w not in ignore]
+word = sorted(list(set(word)))
+
+#Remove duplicates
+classes = sorted(list(set(classes)))
+
+print(len(document),'document', document)
+print(len(classes),'classes',classes)
+print(len(word),'unique stemmed words',word)
+
+
+
+
+for doc in document:
+    bag = [0] * len(word)  # Initialize with zeros
+    pattern_word = doc[0]
+    pattern_word = [stemmer.stem(word.lower()) for word in pattern_word]
+
+    for w in pattern_word:
+        if w in word:
+            bag[word.index(w)] = 1
+
+    output_row = list(output_empty)
+    output_row[classes.index(doc[1])] = 1
+
+    training.append([bag, output_row])
+
+# Shuffle the features and turn them into a NumPy array
+random.shuffle(training)
+
+# Convert the training data into NumPy arrays with consistent dimensions
+train_x = np.array([x[0] for x in training])
+train_y = np.array([x[1] for x in training])
+
+model = tf.keras.Sequential()
+model.add(tf.keras.layers.Dense(10,input_shape = (len(train_x[0]),)))
+model.add(tf.keras.layers.Dense(10))
+model.add(tf.keras.layers.Dense(len(train_y[0]), activation='softmax'))
+model.compile(tf.keras.optimizers.Adam(), loss = 'categorical_crossentropy', metrics = ['accuracy'])
+
+
+model.fit(np.array(train_x), np.array(train_y),epochs=200, batch_size = 8, verbose=1)
+model.save("model.pkl")
+
+import pickle
+pickle.dump({'word':word, 'classes':classes}, open("training_data", "wb"))
+
+from keras.models import load_model
+model = load_model('model.pkl')
+data = pickle.load(open("training_data", "rb") )
+word = data['word']
+classes = data['classes']
+
+with open('intents.json') as json_data:
+    intent = json.load(json_data)
+
+
+
+def clean_up_sentence(sentence):
+    # tokenizing the pattern
+    sentence_word = nltk.word_tokenize(sentence)
+    # stemming each word 
+    sentence_word = [stemmer.stem(word.lower()) for word in sentence_word]
+    return sentence_word
+
+# returning bag of word array : 0 or 1 for each word in the bag that exist in the sentence
+def bow(sentence , word):
+    # tokenizing the pattern 
+    sentence_word = clean_up_sentence(sentence)
+    
+    bag = [0]*len(word)
+    for s in sentence_word:
+        for i,w in enumerate(word):
+            if w==s:
+                bag[i] = 1
+    bag = np.array(bag)
+    return(bag)
+
+
+
+
+ERROR_THRESHOULD = 0.30
+def classify(sentence):
+    bag = bow(sentence, word)
+    result = model.predict(np.array([bag]))
+    result = [[i,r] for i,r in enumerate(result[0]) if r>ERROR_THRESHOULD]
+    
+    result.sort(key = lambda x: x[1], reverse=True)
+    return_list = []
+    
+    for r in result:
+        return_list.append((classes[r[0]], r[1]))
+        return return_list
+    
+    
+def response(sentence):
+    result = classify(sentence)
+    
+    if result:
+        while result:
+            for i in intent['intents']:
+                # find a tag matching the first result
+                if i['tag'] ==result[0][0]:
+                    return print(random.choice(i['responses']))
+                
+            result.pop(0)
+
+
+
+
+response("Where are you located?")
+response('Give me your social media accounts link')
